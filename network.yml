@@ -1,0 +1,354 @@
+
+Description: >-
+ This template deploys a VPC, two public subnets and four private subnets across two Availability Zones. 
+ It also deploys an internet gateway, with a default route table for the public subnets and a custom route table for the public subnets. 
+ Lastly, it deploys two NAT gateways (one in each public subnet)
+
+Parameters:
+  EnvironmentName:
+    Description: Name for the deployment environment. It'll also be the prefix for the names of resources deployed by this template
+    Type: String
+    Default: Demo
+
+  VpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.10.0.0/16
+
+  PublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in Availability Zone one
+    Type: String
+    Default: 10.10.10.0/24
+
+  PublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in Availability Zone two
+    Type: String
+    Default: 10.10.11.0/24
+
+  WebAppPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Web application private subnet in Availability Zone one
+    Type: String
+    Default: 10.10.20.0/24
+
+  WebAppPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Web application private subnet in Availability Zone two
+    Type: String
+    Default: 10.10.21.0/24
+  
+  RDSPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the RDS private subnet in Availability Zone one
+    Type: String
+    Default: 10.10.22.0/24
+
+  RDSPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the RDS private subnet in Availability Zone two
+    Type: String
+    Default: 10.10.23.0/24
+
+Resources:
+  # VPC & IGW Resources
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCIDR
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Ref EnvironmentName
+
+  InternetGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref VPC
+  
+  # Public & Private subnets' Resources
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs '' ]
+      CidrBlock: !Ref PublicSubnet1CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ1)
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
+
+  WebAppPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref WebAppPrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} WebApp Private Subnet (AZ1)
+
+  WebAppPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref WebAppPrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} WebApp Private Subnet (AZ2)
+
+  RDSPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref RDSPrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} RDS Private Subnet (AZ1)
+
+  RDSPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref RDSPrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} RDS Private Subnet (AZ2)
+
+  # NAT Gatways Resources
+  NatGateway1EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway2EIP:
+    Type: AWS::EC2::EIP
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway1:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway1EIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  NatGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NatGateway2EIP.AllocationId
+      SubnetId: !Ref PublicSubnet2
+
+  # Route tables,routes & Subnet route tables' associations
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Public Routes
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet1
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref PublicSubnet2
+
+  AZ1PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ1)
+
+  AZ1PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AZ1PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway1
+
+  WebAppSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ1PrivateRouteTable
+      SubnetId: !Ref WebAppPrivateSubnet1
+
+  RDSSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ1PrivateRouteTable
+      SubnetId: !Ref RDSPrivateSubnet1
+
+  AZ2PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} Private Routes (AZ2)
+
+  AZ2PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref AZ2PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway2
+
+  WebAppSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ2PrivateRouteTable
+      SubnetId: !Ref WebAppPrivateSubnet2
+
+  RDSSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ2PrivateRouteTable
+      SubnetId: !Ref RDSPrivateSubnet2
+
+  # Security Groups
+
+  LBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "app-lb-sg"
+      GroupDescription: "Security group with http allow rule"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80
+      VpcId: !Ref VPC
+
+  WebAppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "web-app-sg"
+      GroupDescription: "Allows Application LB Security Group access on port 80"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !GetAtt LBSecurityGroup.GroupId
+          FromPort: 80
+          ToPort: 80
+      VpcId: !Ref VPC
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "rds-cfn-sg"
+      GroupDescription: "Allows RDS Access on ports 5432 & 3306"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !GetAtt WebAppSecurityGroup.GroupId
+          FromPort: 3306
+          ToPort: 3306
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !GetAtt WebAppSecurityGroup.GroupId
+          FromPort: 5432
+          ToPort: 5432
+      VpcId: !Ref VPC
+Outputs:
+  VPC:
+    Description: A reference to the created VPC
+    Value: !Ref VPC
+
+  PublicSubnets:
+    Description: A list of the public subnets
+    Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
+
+  PrivateSubnets:
+    Description: A list of the private subnets
+    Value: !Join [ ",", [ !Ref WebAppPrivateSubnet1, !Ref WebAppPrivateSubnet1, !Ref RDSPrivateSubnet1, !Ref RDSPrivateSubnet2]]
+
+  PublicSubnet1:
+    Description: A reference to the public subnet in Availability Zone one
+    Value: !Ref PublicSubnet1
+    Export:
+      Name: PublicSubnet1
+
+  PublicSubnet2:
+    Description: A reference for the public subnet in Availability Zone two
+    Value: !Ref PublicSubnet2
+    Export:
+      Name: PublicSubnet2
+
+  WebAppPrivateSubnet1:
+    Description: A reference for the WebApp subnet in Availability Zone one
+    Value: !Ref WebAppPrivateSubnet1
+    Export:
+      Name: WebAppPrivateSubnet1
+
+  WebAppPrivateSubnet2:
+    Description: A reference for the WebApp subnet in Availability Zone two
+    Value: !Ref WebAppPrivateSubnet2
+    Export:
+      Name: WebAppPrivateSubnet2
+
+  RDSPrivateSubnet1:
+    Description: A reference for the RDS subnet Availability Zone one
+    Value: !Ref RDSPrivateSubnet1
+    Export:
+      Name: RDSPrivateSubnet1
+
+  RDSPrivateSubnet2:
+    Description: A reference for the subnet Availability Zone two
+    Value: !Ref RDSPrivateSubnet2
+    Export:
+      Name: RDSPrivateSubnet2
+
+  LBSecurityGroup:
+    Description: LB Security Group with http allow rule
+    Value: !Ref LBSecurityGroup
+    Export:
+      Name: LBSecurityGroup
+
+  WebAppSecurityGroup:
+    Description: Web Security Group 
+    Value: !Ref WebAppSecurityGroup
+    Export:
+      Name: WebAppSecurityGroup
+
+  RDSSecurityGroup:
+    Description: RDS Security Group 
+    Value: !Ref RDSSecurityGroup
+    Export:
+      Name: RDSSecurityGroup
