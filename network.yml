@@ -291,64 +291,65 @@ Outputs:
     Description: A reference to the created VPC
     Value: !Ref VPC
 
-  PublicSubnets:
-    Description: A list of the public subnets
-    Value: !Join [ ",", [ !Ref PublicSubnet1, !Ref PublicSubnet2 ]]
-
-  PrivateSubnets:
-    Description: A list of the private subnets
-    Value: !Join [ ",", [ !Ref WebAppPrivateSubnet1, !Ref WebAppPrivateSubnet1, !Ref RDSPrivateSubnet1, !Ref RDSPrivateSubnet2]]
-
   PublicSubnet1:
     Description: A reference to the public subnet in Availability Zone one
     Value: !Ref PublicSubnet1
     Export:
-      Name: PublicSubnet1
+      Name: 
+        !Sub "${AWS::StackName}-PublicSubnet1-ID"
 
   PublicSubnet2:
-    Description: A reference for the public subnet in Availability Zone two
+    Description: A reference for the public subnet ID in Availability Zone two
     Value: !Ref PublicSubnet2
     Export:
-      Name: PublicSubnet2
+      Name:
+        !Sub "${AWS::StackName}-PublicSubnet2-ID"
 
   WebAppPrivateSubnet1:
-    Description: A reference for the WebApp subnet in Availability Zone one
+    Description: A reference for the WebApp subnet ID in Availability Zone one
     Value: !Ref WebAppPrivateSubnet1
     Export:
-      Name: WebAppPrivateSubnet1
+      Name: 
+        !Sub "${AWS::StackName}-WebAppPrivateSubnet1-ID"
 
   WebAppPrivateSubnet2:
-    Description: A reference for the WebApp subnet in Availability Zone two
+    Description: A reference for the WebApp subnet ID in Availability Zone two
     Value: !Ref WebAppPrivateSubnet2
     Export:
-      Name: WebAppPrivateSubnet2
+      Name:
+        !Sub "${AWS::StackName}-WebAppPrivateSubnet2-ID"
 
   RDSPrivateSubnet1:
-    Description: A reference for the RDS subnet Availability Zone one
+    Description: A reference for the RDS subnet ID Availability Zone one
     Value: !Ref RDSPrivateSubnet1
     Export:
-      Name: RDSPrivateSubnet1
+      Name: 
+        !Sub "${AWS::StackName}-RDSPrivateSubnet1-ID"
 
   RDSPrivateSubnet2:
-    Description: A reference for the subnet Availability Zone two
+    Description: A reference for the subnet ID Availability Zone two
     Value: !Ref RDSPrivateSubnet2
     Export:
-      Name: RDSPrivateSubnet2
+      Name: 
+        !Sub "${AWS::StackName}-RDSPrivateSubnet2-ID"
 
   LBSecurityGroup:
-    Description: LB Security Group with http allow rule
+    Description: LB Security Group ID
     Value: !Ref LBSecurityGroup
     Export:
-      Name: LBSecurityGroup
+      Name: 
+        !Sub "${AWS::StackName}-LBSecurityGroup-ID"
 
   WebAppSecurityGroup:
-    Description: Web Security Group 
+    Description: Web Security Group ID
     Value: !Ref WebAppSecurityGroup
     Export:
-      Name: WebAppSecurityGroup
+      Name: 
+        !Sub "${AWS::StackName}-WebAppSecurityGroup-ID"
 
   RDSSecurityGroup:
-    Description: RDS Security Group 
+    Description: RDS Security Group ID
     Value: !Ref RDSSecurityGroup
     Export:
-      Name: RDSSecurityGroup
+      Name: 
+        !Sub "${AWS::StackName}-RDSSecurityGroup-ID"
