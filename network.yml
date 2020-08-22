@@ -1,4 +1,5 @@
 
+AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
  This template deploys a VPC, two public subnets and four private subnets across two Availability Zones. 
  It also deploys an internet gateway, with a default route table for the public subnets and a custom route table for the public subnets. 
@@ -274,17 +275,13 @@ Resources:
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "rds-cfn-sg"
-      GroupDescription: "Allows RDS Access on ports 5432 & 3306"
+      GroupName: "mysql-rds-sg"
+      GroupDescription: "Allows Access on port 3306"
       SecurityGroupIngress:
         - IpProtocol: tcp
           SourceSecurityGroupId: !GetAtt WebAppSecurityGroup.GroupId
           FromPort: 3306
           ToPort: 3306
-        - IpProtocol: tcp
-          SourceSecurityGroupId: !GetAtt WebAppSecurityGroup.GroupId
-          FromPort: 5432
-          ToPort: 5432
       VpcId: !Ref VPC
 Outputs:
   VPC:
@@ -292,64 +289,64 @@ Outputs:
     Value: !Ref VPC
 
   PublicSubnet1:
-    Description: A reference to the public subnet in Availability Zone one
+    Description: ID for the public subnet in Availability Zone one
     Value: !Ref PublicSubnet1
     Export:
       Name: 
         !Sub "${AWS::StackName}-PublicSubnet1-ID"
 
   PublicSubnet2:
-    Description: A reference for the public subnet ID in Availability Zone two
+    Description: ID for the public subnet in Availability Zone two
     Value: !Ref PublicSubnet2
     Export:
       Name:
         !Sub "${AWS::StackName}-PublicSubnet2-ID"
 
   WebAppPrivateSubnet1:
-    Description: A reference for the WebApp subnet ID in Availability Zone one
+    Description: WebApp subnet ID in Availability Zone one
     Value: !Ref WebAppPrivateSubnet1
     Export:
       Name: 
         !Sub "${AWS::StackName}-WebAppPrivateSubnet1-ID"
 
   WebAppPrivateSubnet2:
-    Description: A reference for the WebApp subnet ID in Availability Zone two
+    Description: WebApp subnet ID in Availability Zone two
     Value: !Ref WebAppPrivateSubnet2
     Export:
       Name:
         !Sub "${AWS::StackName}-WebAppPrivateSubnet2-ID"
 
   RDSPrivateSubnet1:
-    Description: A reference for the RDS subnet ID Availability Zone one
+    Description: RDS subnet ID Availability Zone one
     Value: !Ref RDSPrivateSubnet1
     Export:
       Name: 
         !Sub "${AWS::StackName}-RDSPrivateSubnet1-ID"
 
   RDSPrivateSubnet2:
-    Description: A reference for the subnet ID Availability Zone two
+    Description: RDS subnet ID Availability Zone two
     Value: !Ref RDSPrivateSubnet2
     Export:
       Name: 
         !Sub "${AWS::StackName}-RDSPrivateSubnet2-ID"
 
   LBSecurityGroup:
-    Description: LB Security Group ID
-    Value: !Ref LBSecurityGroup
+    Description: App LB Security Group ID
+    Value: !GetAtt LBSecurityGroup.GroupId
     Export:
       Name: 
         !Sub "${AWS::StackName}-LBSecurityGroup-ID"
 
   WebAppSecurityGroup:
-    Description: Web Security Group ID
-    Value: !Ref WebAppSecurityGroup
+    Description: Web App Security Group ID
+    Value: !GetAtt WebAppSecurityGroup.GroupId
     Export:
       Name: 
         !Sub "${AWS::StackName}-WebAppSecurityGroup-ID"
 
   RDSSecurityGroup:
-    Description: RDS Security Group ID
-    Value: !Ref RDSSecurityGroup
+    Description: RDS Instance Security Group ID
+    Value: !GetAtt RDSSecurityGroup.GroupId
     Export:
       Name: 
         !Sub "${AWS::StackName}-RDSSecurityGroup-ID"
