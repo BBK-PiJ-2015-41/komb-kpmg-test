@@ -3,7 +3,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
  This template deploys a VPC, two public subnets and six private subnets across two Availability Zones. 
  It also deploys an internet gateway and two custom route tables - one for the public subnets and the other for the private subnets. 
- Lastly, it deploys two NAT gateways (one in each public subnet) to allow the private subnet access to the internet
+ Lastly, it deploys two NAT gateways (one in each public subnet) to allow the private subnet access to the internet and EC2 Security Groups
 
 Parameters:
   EnvironmentName:
@@ -295,7 +295,6 @@ Resources:
   ExternalLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "external-lb-sg"
       GroupDescription: "Security group with http allow rule"
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -307,36 +306,90 @@ Resources:
   WebTierSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "web-tier-sg"
-      GroupDescription: "Allows External LB Security Group access on port 80"
+      GroupDescription: "Allows external LB access on port 80"
       SecurityGroupIngress:
         - IpProtocol: tcp
           SourceSecurityGroupId: !GetAtt ExternalLBSecurityGroup.GroupId
           FromPort: 80
           ToPort: 80
       VpcId: !Ref VPC
+  
+  WebTierICMPIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+        GroupId: !GetAtt WebTierSecurityGroup.GroupId
+        IpProtocol: icmp
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt WebTierSecurityGroup.GroupId
+  WebTierFullAccessIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+        GroupId: !GetAtt WebTierSecurityGroup.GroupId
+        IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        SourceSecurityGroupId: !GetAtt WebTierSecurityGroup.GroupId
 
   InternalLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "internal-lb-sg"
-      GroupDescription: "Allows Web Tier Access on all ports"
+      GroupDescription: "Allows Web Tier Access on port 80"
       SecurityGroupIngress:
-        - IpProtocol: -1
+        - IpProtocol: tcp
           SourceSecurityGroupId: !GetAtt WebTierSecurityGroup.GroupId
+          FromPort: 80
+          ToPort: 80
       VpcId: !Ref VPC
+
+  AppTierInternalLBIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+        GroupId: !GetAtt InternalLBSecurityGroup.GroupId
+        IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !GetAtt AppTierSecurityGroup.GroupId
+  
+  AppTierSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allows internal LB access on port 80"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          SourceSecurityGroupId: !GetAtt InternalLBSecurityGroup.GroupId
+          FromPort: 80
+          ToPort: 80
+      VpcId: !Ref VPC
+  
+  AppTierICMPIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+        GroupId: !GetAtt AppTierSecurityGroup.GroupId
+        IpProtocol: icmp
+        FromPort: -1
+        ToPort: -1
+        SourceSecurityGroupId: !GetAtt AppTierSecurityGroup.GroupId
+  AppTierFullAccessIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+        GroupId: !GetAtt AppTierSecurityGroup.GroupId
+        IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        SourceSecurityGroupId: !GetAtt AppTierSecurityGroup.GroupId
 
   DataTierSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "data-tier-sg"
       GroupDescription: "Allows Access on port 3306"
       SecurityGroupIngress:
         - IpProtocol: tcp
-          SourceSecurityGroupId: !GetAtt InternalLBSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt AppTierSecurityGroup.GroupId
           FromPort: 3306
           ToPort: 3306
       VpcId: !Ref VPC
+
 
 # Outputs
 
@@ -377,35 +430,63 @@ Outputs:
         !Sub "${AWS::StackName}-WebTierPrivateSubnet2-ID"
 
   AppTierPrivateSubnet1:
-    Description: Data Tier subnet ID in Availability Zone one
+    Description: App Tier subnet ID in Availability Zone one
     Value: !Ref AppTierPrivateSubnet1
     Export:
       Name: 
         !Sub "${AWS::StackName}-AppTierPrivateSubnet1-ID"
 
   AppTierPrivateSubnet2:
-    Description: Data Tier subnet ID in Availability Zone two
+    Description: App Tier subnet ID in Availability Zone two
     Value: !Ref AppTierPrivateSubnet2
     Export:
       Name: 
         !Sub "${AWS::StackName}-AppTierPrivateSubnet2-ID"
+  
+  DataTierPrivateSubnet1:
+    Description: Data Tier subnet ID in Availability Zone two
+    Value: !Ref DataTierPrivateSubnet1
+    Export:
+      Name: 
+        !Sub "${AWS::StackName}-DataTierPrivateSubnet1-ID"
+   
+  DataTierPrivateSubnet2:
+    Description: Data Tier subnet ID in Availability Zone two
+    Value: !Ref DataTierPrivateSubnet2
+    Export:
+      Name: 
+        !Sub "${AWS::StackName}-DataTierPrivateSubnet2-ID"
 
   ExternalLBSecurityGroup:
-    Description: App LB Security Group ID
+    Description: External LB Security Group ID
     Value: !GetAtt ExternalLBSecurityGroup.GroupId
     Export:
       Name: 
         !Sub "${AWS::StackName}-ExternalLBSecurityGroup-ID"
 
+  InternalLBSecurityGroup:
+    Description: Internal LB Security Group ID
+    Value: !GetAtt InternalLBSecurityGroup.GroupId
+    Export:
+      Name: 
+        !Sub "${AWS::StackName}-InternalLBSecurityGroup-ID"
+
   WebTierSecurityGroup:
-    Description: Web App Security Group ID
+    Description: Web Tier Security Group ID
     Value: !GetAtt WebTierSecurityGroup.GroupId
     Export:
       Name: 
         !Sub "${AWS::StackName}-WebTierSecurityGroup-ID"
+  
+  AppTierSecurityGroup:
+    Description: App Tier Security Group ID
+    Value: !GetAtt AppTierSecurityGroup.GroupId
+    Export:
+      Name: 
+        !Sub "${AWS::StackName}-AppTierSecurityGroup-ID"
 
   DataTierSecurityGroup:
-    Description: RDS Instance Security Group ID
+    Description: Data Tier Security Group ID
     Value: !GetAtt DataTierSecurityGroup.GroupId
     Export:
       Name: 
