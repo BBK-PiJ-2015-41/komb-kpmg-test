@@ -1,0 +1,200 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: This template deploys an EC2 launch template, an Auto Scaling Group for the Application Tier & an internal Application Elastic LoadBalancer
+
+Parameters:
+  NetworkStack: 
+    Description: Name of CloudFormation Stack used to create the solutions's network resources
+    Type: String
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+  EC2InstanceKeyPair:
+    Type: AWS::EC2::KeyPair::KeyName
+  EC2InstanceType:
+    Type: String
+    Default: t2.micro
+  AWSManagedSSMEC2Policy:
+    Description: AWS Managed Policy for EC2 Session Manager Support
+    Type: String
+    Default: arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+Resources:
+  EC2SessionManagerRole:
+    Type: AWS::IAM::Role
+    Properties: 
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Description: Allows connection to EC2 instances using Session Manager
+      Path: /
+      ManagedPolicyArns: 
+        - !Ref AWSManagedSSMEC2Policy
+
+  AppInstanceProfile:
+     Type: AWS::IAM::InstanceProfile
+     Properties:
+      Path: /
+      Roles:
+        - !Ref EC2SessionManagerRole
+
+  AppLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties: 
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData: 
+        CreditSpecification: 
+          CpuCredits: Unlimited
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref EC2InstanceType
+        IamInstanceProfile: 
+          Arn: !GetAtt AppInstanceProfile.Arn
+        KeyName: !Ref EC2InstanceKeyPair
+        Monitoring: 
+          Enabled: true
+        SecurityGroupIds: 
+          -  Fn::ImportValue:
+              !Sub "${NetworkStack}-AppTierSecurityGroup-ID" 
+        UserData:
+          Fn::Base64: !Sub |
+            #!/bin/bash -xe
+            yum -y update
+            # Install mysql client
+            yum -y install mysql
+            # Install & configuration httpd
+            yum -y install httpd
+            systemctl enable httpd
+            systemctl start httpd
+            mkdir -p /var/www/html
+            chown -R ec2-user:apache /var/www/
+            hostname=$(curl http://169.254.169.254/latest/meta-data/hostname)
+            echo "Hello from Application Server $hostname" > /var/www/html/index.html
+  
+  AppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPort: 80
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 2
+      HealthyThresholdCount: 5
+      Name: AppServers-Target-Group
+      Port: 80
+      Protocol: HTTP
+      VpcId:
+        Fn::ImportValue:
+            !Sub "${NetworkStack}-VPC-ID" 
+
+  AppASG:
+    UpdatePolicy: 
+      AutoScalingRollingUpdate: 
+        MinInstancesInService: "1"
+        MaxBatchSize: "1"
+        PauseTime: PT5M
+        WaitOnResourceSignals: true
+        SuspendProcesses:
+          - HealthCheck
+          - ReplaceUnhealthy
+          - AZRebalance
+          - AlarmNotification
+          - ScheduledActions
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: AppASG
+      MinSize: "2"
+      MaxSize: "5"
+      DesiredCapacity: "3"
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchTemplate:
+        LaunchTemplateId: !Ref AppLaunchTemplate
+        Version: !GetAtt AppLaunchTemplate.LatestVersionNumber
+      TargetGroupARNs:
+        - !Ref AppTargetGroup
+      VPCZoneIdentifier:
+        -  Fn::ImportValue:
+            !Sub "${NetworkStack}-AppTierPrivateSubnet1-ID" 
+        - Fn::ImportValue:
+            !Sub "${NetworkStack}-AppTierPrivateSubnet2-ID" 
+
+  ASGScaleOutPolicy: 
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: ChangeInCapacity
+      PolicyType: SimpleScaling
+      Cooldown: 180
+      AutoScalingGroupName: !Ref AppASG
+      ScalingAdjustment: 1
+
+  ASGScaleInPolicy: 
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties: 
+      AdjustmentType: ChangeInCapacity
+      PolicyType: SimpleScaling
+      Cooldown: 180
+      AutoScalingGroupName: !Ref AppASG
+      ScalingAdjustment: -1
+  
+  HighCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+      AlarmActions: 
+        - !Ref ASGScaleOutPolicy
+      AlarmDescription: Scale-out if CPU is greater than 70% for 10 minutes
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref AppASG
+      EvaluationPeriods: 2
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      Period: 300
+      Statistic: Average
+      Threshold: 70
+
+  LowCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties: 
+      AlarmActions: 
+        - !Ref ASGScaleInPolicy
+      AlarmDescription: Scale-in if CPU is less than 30% for 10 minutes
+      ComparisonOperator: LessThanThreshold
+      Dimensions: 
+        - Name: AutoScalingGroupName
+          Value: !Ref AppASG
+      EvaluationPeriods: 2
+      Namespace: AWS/EC2
+      MetricName: CPUUtilization
+      Period: 300
+      Statistic: Average
+      Threshold: 30
+
+  AppALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties: 
+      IpAddressType: ipv4
+      Scheme: internal
+      SecurityGroups: 
+        - Fn::ImportValue:
+            !Sub "${NetworkStack}-InternalLBSecurityGroup-ID" 
+      Subnets: 
+        - Fn::ImportValue:
+            !Sub "${NetworkStack}-AppTierPrivateSubnet1-ID" 
+        - Fn::ImportValue:
+            !Sub "${NetworkStack}-AppTierPrivateSubnet2-ID" 
+    
+  AppALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+      DefaultActions:
+        - TargetGroupArn: !Ref AppTargetGroup
+          Type: forward
+      LoadBalancerArn: !Ref AppALB
+      Port: 80
+      Protocol: HTTP
+
