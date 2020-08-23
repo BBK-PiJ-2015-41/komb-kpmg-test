@@ -1,9 +1,9 @@
 
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >-
- This template deploys a VPC, two public subnets and four private subnets across two Availability Zones. 
- It also deploys an internet gateway, with a default route table for the public subnets and a custom route table for the public subnets. 
- Lastly, it deploys two NAT gateways (one in each public subnet)
+ This template deploys a VPC, two public subnets and six private subnets across two Availability Zones. 
+ It also deploys an internet gateway and two custom route tables - one for the public subnets and the other for the private subnets. 
+ Lastly, it deploys two NAT gateways (one in each public subnet) to allow the private subnet access to the internet
 
 Parameters:
   EnvironmentName:
@@ -26,25 +26,35 @@ Parameters:
     Type: String
     Default: 10.10.11.0/24
 
-  WebAppPrivateSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the Web application private subnet in Availability Zone one
+  WebTierPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Web Tier private subnet in Availability Zone one
     Type: String
     Default: 10.10.20.0/24
 
-  WebAppPrivateSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the Web application private subnet in Availability Zone two
+  WebTierPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Web Tier private subnet in Availability Zone two
     Type: String
     Default: 10.10.21.0/24
   
-  RDSPrivateSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the RDS private subnet in Availability Zone one
+  AppTierPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the App Tier private subnet in Availability Zone one
     Type: String
-    Default: 10.10.22.0/24
+    Default: 10.10.30.0/24
 
-  RDSPrivateSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the RDS private subnet in Availability Zone two
+  AppTierPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the App Tier private subnet in Availability Zone two
     Type: String
-    Default: 10.10.23.0/24
+    Default: 10.10.31.0/24
+
+  DataTierPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Data Tier private subnet in Availability Zone one
+    Type: String
+    Default: 10.10.40.0/24
+
+  DataTierPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the Data Tier private subnet in Availability Zone two
+    Type: String
+    Default: 10.10.41.0/24
 
 Resources:
   # VPC & IGW Resources
@@ -94,49 +104,71 @@ Resources:
         - Key: Name
           Value: !Sub ${EnvironmentName} Public Subnet (AZ2)
 
-  WebAppPrivateSubnet1:
+  WebTierPrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs  '' ]
-      CidrBlock: !Ref WebAppPrivateSubnet1CIDR
+      CidrBlock: !Ref WebTierPrivateSubnet1CIDR
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} WebApp Private Subnet (AZ1)
+          Value: !Sub ${EnvironmentName} Web Tier Private Subnet (AZ1)
 
-  WebAppPrivateSubnet2:
+  WebTierPrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ]
-      CidrBlock: !Ref WebAppPrivateSubnet2CIDR
+      CidrBlock: !Ref WebTierPrivateSubnet2CIDR
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} WebApp Private Subnet (AZ2)
+          Value: !Sub ${EnvironmentName} Web Tier Private Subnet (AZ2)
 
-  RDSPrivateSubnet1:
+  DataTierPrivateSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 0, !GetAZs  '' ]
-      CidrBlock: !Ref RDSPrivateSubnet1CIDR
+      CidrBlock: !Ref DataTierPrivateSubnet1CIDR
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} RDS Private Subnet (AZ1)
+          Value: !Sub ${EnvironmentName} Data Tier Private Subnet (AZ1)
 
-  RDSPrivateSubnet2:
+  DataTierPrivateSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       AvailabilityZone: !Select [ 1, !GetAZs  '' ]
-      CidrBlock: !Ref RDSPrivateSubnet2CIDR
+      CidrBlock: !Ref DataTierPrivateSubnet2CIDR
       MapPublicIpOnLaunch: false
       Tags:
         - Key: Name
-          Value: !Sub ${EnvironmentName} RDS Private Subnet (AZ2)
+          Value: !Sub ${EnvironmentName} Data Tier Private Subnet (AZ2)
+
+  AppTierPrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 0, !GetAZs  '' ]
+      CidrBlock: !Ref AppTierPrivateSubnet1CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} App Tier Private Subnet (AZ1)
+
+  AppTierPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      AvailabilityZone: !Select [ 1, !GetAZs  '' ]
+      CidrBlock: !Ref AppTierPrivateSubnet2CIDR
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${EnvironmentName} App Tier Private Subnet (AZ2)
 
   # NAT Gatways Resources
   NatGateway1EIP:
@@ -207,17 +239,23 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway1
 
-  WebAppSubnet1RouteTableAssociation:
+  WebTierSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref AZ1PrivateRouteTable
-      SubnetId: !Ref WebAppPrivateSubnet1
+      SubnetId: !Ref WebTierPrivateSubnet1
 
-  RDSSubnet1RouteTableAssociation:
+  DataTierSubnet1RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref AZ1PrivateRouteTable
-      SubnetId: !Ref RDSPrivateSubnet1
+      SubnetId: !Ref DataTierPrivateSubnet1
+
+  AppTierSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ1PrivateRouteTable
+      SubnetId: !Ref AppTierPrivateSubnet1
 
   AZ2PrivateRouteTable:
     Type: AWS::EC2::RouteTable
@@ -234,24 +272,30 @@ Resources:
       DestinationCidrBlock: 0.0.0.0/0
       NatGatewayId: !Ref NatGateway2
 
-  WebAppSubnet2RouteTableAssociation:
+  WebTierSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref AZ2PrivateRouteTable
-      SubnetId: !Ref WebAppPrivateSubnet2
+      SubnetId: !Ref WebTierPrivateSubnet2
 
-  RDSSubnet2RouteTableAssociation:
+  DataTierSubnet2RouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
       RouteTableId: !Ref AZ2PrivateRouteTable
-      SubnetId: !Ref RDSPrivateSubnet2
+      SubnetId: !Ref DataTierPrivateSubnet2
+
+  AppTierSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref AZ2PrivateRouteTable
+      SubnetId: !Ref AppTierPrivateSubnet2
 
   # Security Groups
 
-  LBSecurityGroup:
+  ExternalLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "app-lb-sg"
+      GroupName: "external-lb-sg"
       GroupDescription: "Security group with http allow rule"
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -260,33 +304,49 @@ Resources:
           ToPort: 80
       VpcId: !Ref VPC
 
-  WebAppSecurityGroup:
+  WebTierSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "web-app-sg"
-      GroupDescription: "Allows Application LB Security Group access on port 80"
+      GroupName: "web-tier-sg"
+      GroupDescription: "Allows External LB Security Group access on port 80"
       SecurityGroupIngress:
         - IpProtocol: tcp
-          SourceSecurityGroupId: !GetAtt LBSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt ExternalLBSecurityGroup.GroupId
           FromPort: 80
           ToPort: 80
       VpcId: !Ref VPC
 
-  RDSSecurityGroup:
+  InternalLBSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupName: "mysql-rds-sg"
+      GroupName: "internal-lb-sg"
+      GroupDescription: "Allows Web Tier Access on all ports"
+      SecurityGroupIngress:
+        - IpProtocol: -1
+          SourceSecurityGroupId: !GetAtt WebTierSecurityGroup.GroupId
+      VpcId: !Ref VPC
+
+  DataTierSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: "data-tier-sg"
       GroupDescription: "Allows Access on port 3306"
       SecurityGroupIngress:
         - IpProtocol: tcp
-          SourceSecurityGroupId: !GetAtt WebAppSecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt InternalLBSecurityGroup.GroupId
           FromPort: 3306
           ToPort: 3306
       VpcId: !Ref VPC
+
+# Outputs
+
 Outputs:
   VPC:
-    Description: A reference to the created VPC
+    Description: ID for the created VPC
     Value: !Ref VPC
+    Export:
+      Name: 
+        !Sub "${AWS::StackName}-VPC-ID"
 
   PublicSubnet1:
     Description: ID for the public subnet in Availability Zone one
@@ -302,51 +362,51 @@ Outputs:
       Name:
         !Sub "${AWS::StackName}-PublicSubnet2-ID"
 
-  WebAppPrivateSubnet1:
-    Description: WebApp subnet ID in Availability Zone one
-    Value: !Ref WebAppPrivateSubnet1
+  WebTierPrivateSubnet1:
+    Description: Web Tier subnet ID in Availability Zone one
+    Value: !Ref WebTierPrivateSubnet1
     Export:
       Name: 
-        !Sub "${AWS::StackName}-WebAppPrivateSubnet1-ID"
+        !Sub "${AWS::StackName}-WebTierPrivateSubnet1-ID"
 
-  WebAppPrivateSubnet2:
-    Description: WebApp subnet ID in Availability Zone two
-    Value: !Ref WebAppPrivateSubnet2
+  WebTierPrivateSubnet2:
+    Description: Web Tier subnet ID in Availability Zone two
+    Value: !Ref WebTierPrivateSubnet2
     Export:
       Name:
-        !Sub "${AWS::StackName}-WebAppPrivateSubnet2-ID"
+        !Sub "${AWS::StackName}-WebTierPrivateSubnet2-ID"
 
-  RDSPrivateSubnet1:
-    Description: RDS subnet ID Availability Zone one
-    Value: !Ref RDSPrivateSubnet1
+  AppTierPrivateSubnet1:
+    Description: Data Tier subnet ID in Availability Zone one
+    Value: !Ref AppTierPrivateSubnet1
     Export:
       Name: 
-        !Sub "${AWS::StackName}-RDSPrivateSubnet1-ID"
+        !Sub "${AWS::StackName}-AppTierPrivateSubnet1-ID"
 
-  RDSPrivateSubnet2:
-    Description: RDS subnet ID Availability Zone two
-    Value: !Ref RDSPrivateSubnet2
+  AppTierPrivateSubnet2:
+    Description: Data Tier subnet ID in Availability Zone two
+    Value: !Ref AppTierPrivateSubnet2
     Export:
       Name: 
-        !Sub "${AWS::StackName}-RDSPrivateSubnet2-ID"
+        !Sub "${AWS::StackName}-AppTierPrivateSubnet2-ID"
 
-  LBSecurityGroup:
+  ExternalLBSecurityGroup:
     Description: App LB Security Group ID
-    Value: !GetAtt LBSecurityGroup.GroupId
+    Value: !GetAtt ExternalLBSecurityGroup.GroupId
     Export:
       Name: 
-        !Sub "${AWS::StackName}-LBSecurityGroup-ID"
+        !Sub "${AWS::StackName}-ExternalLBSecurityGroup-ID"
 
-  WebAppSecurityGroup:
+  WebTierSecurityGroup:
     Description: Web App Security Group ID
-    Value: !GetAtt WebAppSecurityGroup.GroupId
+    Value: !GetAtt WebTierSecurityGroup.GroupId
     Export:
       Name: 
-        !Sub "${AWS::StackName}-WebAppSecurityGroup-ID"
+        !Sub "${AWS::StackName}-WebTierSecurityGroup-ID"
 
-  RDSSecurityGroup:
+  DataTierSecurityGroup:
     Description: RDS Instance Security Group ID
-    Value: !GetAtt RDSSecurityGroup.GroupId
+    Value: !GetAtt DataTierSecurityGroup.GroupId
     Export:
       Name: 
-        !Sub "${AWS::StackName}-RDSSecurityGroup-ID"
+        !Sub "${AWS::StackName}-DataTierSecurityGroup-ID"
